@@ -1,0 +1,21 @@
+[package]
+name = "bbk"
+version = "0.1.0"
+authors = ["tartasprint"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "bbk_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bbki"
+path = "src/interactive_interpreter.rs"
+
+[[bin]]
+name = "bbkp"
+path = "src/proof_checker.rs"
+
+[dependencies]
