@@ -1,4 +1,4 @@
 use crate::record::Record;
 struct Proof {
-    records: Vec<Record>
+    records: Vec<Record>,
 }

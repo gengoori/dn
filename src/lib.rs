@@ -1,7 +1,7 @@
 mod formula;
-mod record;
 mod justif;
 mod proof;
+mod record;
 pub fn test() {
     println!("Hi from lib !");
 }

@@ -1,3 +1,3 @@
-pub enum  Jusitification {
-    Efq(usize)
+pub enum Jusitification {
+    Efq(usize),
 }
