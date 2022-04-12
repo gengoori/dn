@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum Formula {
     Top,
     Bottom,
@@ -24,7 +25,7 @@ enum Lexemes {
     ClosingParenthesis,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Operators {
     Not,
     Or,
@@ -34,11 +35,13 @@ enum Operators {
     Equiv,
 }
 
+#[derive(Debug, PartialEq)]
 enum ParseStackItem {
     Operator(Operators),
     Parenthesis,
 }
 
+#[derive(Debug)]
 enum ParseState {
     BeginingANewGroup,
     Normal,
@@ -83,6 +86,7 @@ impl Operators {
     }
 }
 
+#[derive(Debug)]
 pub enum TokenizationError {
     InvalidCharacter(usize, char),
     UnmatchedClosingParenthesis,
@@ -91,12 +95,16 @@ pub enum TokenizationError {
     AFormulaIsMissing,
     TooManyFormulas,
     InternalError,
+    EmptyParenthesis,
+    InvalidSubFormula,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Regime {
     Stop,
     Eat,
     ForceEat,
+    EndEat,
 }
 
 enum ZOT {
@@ -134,10 +142,15 @@ impl Formula {
         let mut formulas: Vec<Formula> = Vec::new();
         let mut regime = Regime::Stop;
         let mut state = ParseState::BeginingANewGroup;
+        eprintln!("Tokenization done !");
         for l in lexemes {
+            eprintln!("Got a new lexeme");
             Self::read_lexeme(l, &mut regime, &mut state, &mut stack, &mut formulas)?;
+            Self::eat(&mut stack, &mut state, &mut regime, &mut formulas)?;
         }
-        todo!()
+        regime = Regime::EndEat;
+        Self::eat(&mut stack, &mut state, &mut regime, &mut formulas)?;
+        return Ok(formulas.pop().unwrap());
     }
 
     fn read_lexeme(
@@ -147,11 +160,7 @@ impl Formula {
         stack: &mut Vec<ParseStackItem>,
         formulas: &mut Vec<Formula>,
     ) -> Result<(), TokenizationError> {
-        assert!(if let Regime::Stop = *regime {
-            true
-        } else {
-            false
-        });
+        assert_eq!(Regime::Stop, *regime);
         match l {
             Lexemes::OpeningParenthesis => {
                 *state = ParseState::BeginingANewGroup;
@@ -170,10 +179,7 @@ impl Formula {
                 *regime = Regime::Eat;
             }
             Lexemes::ClosingParenthesis => {
-                match stack.pop() {
-                    Some(ParseStackItem::Parenthesis) => *regime = Regime::ForceEat,
-                    _ => return Err(TokenizationError::UnmatchedClosingParenthesis),
-                };
+                *regime = Regime::ForceEat;
             }
             Lexemes::Or => {
                 stack.push(ParseStackItem::Operator(Operators::Or));
@@ -223,6 +229,16 @@ impl Formula {
         formulas: &mut Vec<Formula>,
     ) -> Result<(), TokenizationError> {
         loop {
+            eprintln!("Regime : {:?}", regime);
+            eprintln!("State : {:?}", state);
+            eprintln!("Stack :");
+            for i in stack.iter() {
+                eprintln!("   {:?}", i)
+            }
+            eprintln!("Formula :");
+            for i in formulas.iter() {
+                eprintln!("   {:?}", i)
+            }
             match regime {
                 Regime::Stop => break,
                 Regime::Eat => match Self::get_last_two_ops_from_stack(stack) {
@@ -244,7 +260,9 @@ impl Formula {
                                 return Err(TokenizationError::TooManyFormulas);
                             }
                         }
-                        ParseState::Normal => {}
+                        ParseState::Normal => {
+                            *regime = Regime::Stop;
+                        }
                     },
                     ZOT::Two(left, right) => match state {
                         ParseState::BeginingANewGroup => {
@@ -253,20 +271,99 @@ impl Formula {
                         ParseState::Normal => match Operators::cmp(&left, &right) {
                             Priority::Less => *regime = Regime::Stop,
                             Priority::More => {
-                                let len = stack.len();
+                                let len: usize = stack.len();
                                 stack.swap(len - 2, len - 1);
-                                match stack.pop() {
-                                    Some(ParseStackItem::Operator(o)) => {
-                                        Self::build_from_operator(o, formulas)?
-                                    }
-                                    _ => return Err(TokenizationError::InternalError),
-                                };
+                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
+                                let rightest_formula = formulas.pop().unwrap();
+                                Self::build_from_operator(left, formulas)?;
+                                formulas.push(rightest_formula);
                             }
                         },
                     },
                 },
                 Regime::ForceEat => match Self::get_last_two_ops_from_stack(stack) {
-                    //TODO
+                    ZOT::Zero => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::EmptyParenthesis)
+                        }
+                        ParseState::Normal => {
+                            assert_eq!(stack.pop(), Some(ParseStackItem::Parenthesis));
+                            *regime = Regime::Eat;
+                        }
+                    },
+                    ZOT::One(op) => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::InvalidSubFormula)
+                        }
+                        ParseState::Normal => {
+                            assert_eq!(Some(ParseStackItem::Operator(op)), stack.pop());
+                            assert_eq!(Some(ParseStackItem::Parenthesis), stack.pop());
+                            Self::build_from_operator(op, formulas)?;
+                            *regime = Regime::Eat;
+                        }
+                    },
+                    ZOT::Two(left, right) => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::InternalError)
+                        }
+                        ParseState::Normal => match Operators::cmp(&left, &right) {
+                            Priority::Less => {
+                                assert_eq!(Some(ParseStackItem::Operator(right)), stack.pop());
+                                Self::build_from_operator(right, formulas)?;
+                                *regime = Regime::Eat;
+                            }
+                            Priority::More => {
+                                let len: usize = stack.len();
+                                stack.swap(len - 2, len - 1);
+                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
+                                let rightest_formula = formulas.pop().unwrap();
+                                Self::build_from_operator(left, formulas)?;
+                                formulas.push(rightest_formula);
+                                *regime = Regime::Eat;
+                            }
+                        },
+                    },
+                },
+                Regime::EndEat => match Self::get_last_two_ops_from_stack(stack) {
+                    ZOT::Zero => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::EmptyParenthesis)
+                        }
+                        ParseState::Normal => {
+                            *regime = Regime::Stop;
+                        }
+                    },
+                    ZOT::One(op) => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::InvalidSubFormula)
+                        }
+                        ParseState::Normal => {
+                            assert_eq!(Some(ParseStackItem::Operator(op)), stack.pop());
+                            Self::build_from_operator(op, formulas)?;
+                            *regime = Regime::EndEat;
+                        }
+                    },
+                    ZOT::Two(left, right) => match state {
+                        ParseState::BeginingANewGroup => {
+                            return Err(TokenizationError::InternalError)
+                        }
+                        ParseState::Normal => match Operators::cmp(&left, &right) {
+                            Priority::Less => {
+                                assert_eq!(Some(ParseStackItem::Operator(right)), stack.pop());
+                                Self::build_from_operator(right, formulas)?;
+                                *regime = Regime::EndEat;
+                            }
+                            Priority::More => {
+                                let len: usize = stack.len();
+                                stack.swap(len - 2, len - 1);
+                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
+                                let rightest_formula = formulas.pop().unwrap();
+                                Self::build_from_operator(left, formulas)?;
+                                formulas.push(rightest_formula);
+                                *regime = Regime::EndEat;
+                            }
+                        },
+                    },
                 },
             }
         }
@@ -309,7 +406,7 @@ impl Formula {
                 let left = formulas
                     .pop()
                     .ok_or_else(|| TokenizationError::AFormulaIsMissing)?;
-                formulas.push(Formula::Or(Box::new(left), Box::new(right)));
+                formulas.push(Formula::Implies(Box::new(left), Box::new(right)));
             }
             Operators::RLImplies => {
                 let right = formulas
@@ -318,7 +415,7 @@ impl Formula {
                 let left = formulas
                     .pop()
                     .ok_or_else(|| TokenizationError::AFormulaIsMissing)?;
-                formulas.push(Formula::Or(Box::new(left), Box::new(right)));
+                formulas.push(Formula::RLImplies(Box::new(left), Box::new(right)));
             }
             Operators::Equiv => {
                 let right = formulas
@@ -327,18 +424,21 @@ impl Formula {
                 let left = formulas
                     .pop()
                     .ok_or_else(|| TokenizationError::AFormulaIsMissing)?;
-                formulas.push(Formula::Or(Box::new(left), Box::new(right)));
+                formulas.push(Formula::Equiv(Box::new(left), Box::new(right)));
             }
         };
         Ok(())
     }
 }
 
-//// a^b^c
-//// 12345
-//// 1. formula={a} stack{}
-//// 2. formula={a} stack{^}
-//// 3. formula={a,b} stack=^
-//// 4. formula={a,b} stack=v
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-use std::str::ParseBoolError;
+    #[test]
+    fn simple_formula() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "c∧(a∨b)";
+        dbg!(Formula::read(input).unwrap());
+    }
+}
