@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Formula {
     Top,
     Bottom,
@@ -44,7 +44,8 @@ enum ParseStackItem {
 #[derive(Debug)]
 enum ParseState {
     BeginingANewGroup,
-    Normal,
+    Constant,
+    Operator,
 }
 
 enum Priority {
@@ -55,6 +56,12 @@ enum Priority {
 impl Operators {
     /// # Priorities
     /// ¬,∧,∨,⇒,⇐,⇔
+    ///
+    /// # Contraintes
+    ///
+    /// Soit a une opération binaire, u une opérations unaire et z une opération binaire ou unaire. On a alors
+    /// - cmp(z,u)=Less
+    /// - cmp(u,a)=More
     fn cmp(left: &Self, right: &Self) -> Priority {
         match (left, right) {
             (Operators::Not, Operators::Not) => Priority::Less,
@@ -94,13 +101,15 @@ pub enum TokenizationError {
     InputIsTooLong,
     AFormulaIsMissing,
     TooManyFormulas,
-    InternalError,
+    InternalError(usize),
     EmptyParenthesis,
     InvalidSubFormula,
+    OperatorWithoutRightHandside,
+    BinaryOperatorWithoutRightHandside,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Regime {
+enum Regime {
     Stop,
     Eat,
     ForceEat,
@@ -160,44 +169,52 @@ impl Formula {
         stack: &mut Vec<ParseStackItem>,
         formulas: &mut Vec<Formula>,
     ) -> Result<(), TokenizationError> {
-        assert_eq!(Regime::Stop, *regime);
+        *regime = Regime::Eat;
         match l {
             Lexemes::OpeningParenthesis => {
-                *state = ParseState::BeginingANewGroup;
-                stack.push(ParseStackItem::Parenthesis)
+                stack.push(ParseStackItem::Parenthesis);
+                *state = ParseState::BeginingANewGroup
             }
             Lexemes::Variable(v) => {
                 formulas.push(Formula::Variable(v));
-                *regime = Regime::Eat;
+                *state = ParseState::Constant
             }
             Lexemes::Top => {
                 formulas.push(Formula::Top);
                 *regime = Regime::Eat;
+                *state = ParseState::Constant
             }
             Lexemes::Bottom => {
                 formulas.push(Formula::Bottom);
-                *regime = Regime::Eat;
+                *state = ParseState::Constant
             }
             Lexemes::ClosingParenthesis => {
                 *regime = Regime::ForceEat;
+                // L'état ne change pas
             }
             Lexemes::Or => {
                 stack.push(ParseStackItem::Operator(Operators::Or));
+                *state = ParseState::Operator
             }
             Lexemes::And => {
                 stack.push(ParseStackItem::Operator(Operators::And));
+                *state = ParseState::Operator
             }
             Lexemes::Not => {
                 stack.push(ParseStackItem::Operator(Operators::Not));
+                *state = ParseState::Operator
             }
             Lexemes::Implies => {
                 stack.push(ParseStackItem::Operator(Operators::Implies));
+                *state = ParseState::Operator
             }
             Lexemes::RLImplies => {
                 stack.push(ParseStackItem::Operator(Operators::RLImplies));
+                *state = ParseState::Operator
             }
             Lexemes::Equiv => {
                 stack.push(ParseStackItem::Operator(Operators::Equiv));
+                *state = ParseState::Operator
             }
         };
         Ok(())
@@ -245,38 +262,97 @@ impl Formula {
                     ZOT::Zero => match state {
                         ParseState::BeginingANewGroup => {
                             *regime = Regime::Stop;
-                            *state = ParseState::Normal;
                         }
-                        ParseState::Normal => {
-                            return Err(TokenizationError::TooManyFormulas);
+                        ParseState::Operator => {
+                            return Err(TokenizationError::InternalError(0));
+                        }
+                        ParseState::Constant => {
+                            *regime = Regime::Stop;
                         }
                     },
                     ZOT::One(o) => match state {
                         ParseState::BeginingANewGroup => {
                             if o.is_unary() {
-                                *state = ParseState::Normal;
                                 *regime = Regime::Stop;
                             } else {
                                 return Err(TokenizationError::TooManyFormulas);
                             }
                         }
-                        ParseState::Normal => {
+                        ParseState::Operator => {
+                            *regime = Regime::Stop;
+                        }
+                        ParseState::Constant => {
+                            // On est dans la situation ?{?Oa
+                            if o.is_unary() {
+                                // O s'applique nécessairement à a:
+                                debug_assert_eq!(Some(ParseStackItem::Operator(o)), stack.pop());
+                                Self::build_from_operator(o, formulas)?;
+                            }
                             *regime = Regime::Stop;
                         }
                     },
                     ZOT::Two(left, right) => match state {
                         ParseState::BeginingANewGroup => {
-                            return Err(TokenizationError::InternalError)
+                            // On est dans la situation {?L?R? avec un seul lexème après la parenthèse...
+                            // Sûrement une erreur dans l'assignation de l'état.
+                            return Err(TokenizationError::InternalError(1));
                         }
-                        ParseState::Normal => match Operators::cmp(&left, &right) {
-                            Priority::Less => *regime = Regime::Stop,
+                        ParseState::Constant => match Operators::cmp(&left, &right) {
+                            Priority::Less => {
+                                // On est dans la situation ?L?Ra. On mange ?Ra.
+                                debug_assert_eq!(
+                                    Some(ParseStackItem::Operator(right)),
+                                    stack.pop()
+                                );
+                                Self::build_from_operator(right, formulas)?;
+                            }
                             Priority::More => {
-                                let len: usize = stack.len();
-                                stack.swap(len - 2, len - 1);
-                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
-                                let rightest_formula = formulas.pop().unwrap();
+                                debug_assert!(!right.is_unary());
+                                // Comme right n'est pas unaire, on est dans la situation:
+                                // ? L a R b
+                                // En enlevant b des formules et R de la pile
+                                debug_assert_eq!(
+                                    Some(ParseStackItem::Operator(right)),
+                                    stack.pop()
+                                );
+                                let rightest =
+                                    formulas.pop().ok_or(TokenizationError::InternalError(2))?;
+                                // On se retrouve dans la situation ? L a, et on fait:
+                                debug_assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
                                 Self::build_from_operator(left, formulas)?;
-                                formulas.push(rightest_formula);
+                                // On remet l'opérateur de droite et la formule
+                                formulas.push(rightest);
+                                stack.push(ParseStackItem::Operator(right));
+                            }
+                        },
+                        ParseState::Operator => match Operators::cmp(&left, &right) {
+                            Priority::Less => {
+                                // Situation: ? L [? R
+                                *regime = Regime::Stop;
+                            }
+                            Priority::More => {
+                                if right.is_unary() {
+                                    // Situation LR
+                                    *regime = Regime::Stop; //TODO: ne devrait pas arriver !
+                                } else {
+                                    debug_assert!(!right.is_unary());
+                                    // Si right n'est pas unaire, on est dans la situation:
+                                    // ? L a R
+                                    // En enlevant R de la pile
+                                    debug_assert_eq!(
+                                        Some(ParseStackItem::Operator(right)),
+                                        stack.pop()
+                                    );
+                                    // On se retrouve dans la situation ? L a, et on fait:
+                                    debug_assert_eq!(
+                                        Some(ParseStackItem::Operator(left)),
+                                        stack.pop()
+                                    );
+                                    Self::build_from_operator(left, formulas)?;
+                                    // On remet l'opérateur de droite
+                                    stack.push(ParseStackItem::Operator(right));
+                                    *regime = Regime::Eat; // Peut-être stop
+                                }
                             }
                         },
                     },
@@ -284,18 +360,27 @@ impl Formula {
                 Regime::ForceEat => match Self::get_last_two_ops_from_stack(stack) {
                     ZOT::Zero => match state {
                         ParseState::BeginingANewGroup => {
-                            return Err(TokenizationError::EmptyParenthesis)
+                            return Err(TokenizationError::EmptyParenthesis);
                         }
-                        ParseState::Normal => {
-                            assert_eq!(stack.pop(), Some(ParseStackItem::Parenthesis));
+                        ParseState::Operator => {
+                            // On est dans la situation ?(?o) or une opération à forcément une
+                            // opérande à gauche.
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
+                        }
+                        ParseState::Constant => {
+                            // On est dans la situation ?(a) et on passe à ?a
+                            debug_assert_eq!(Some(ParseStackItem::Parenthesis), stack.pop());
                             *regime = Regime::Eat;
                         }
                     },
                     ZOT::One(op) => match state {
-                        ParseState::BeginingANewGroup => {
-                            return Err(TokenizationError::InvalidSubFormula)
+                        ParseState::BeginingANewGroup | ParseState::Operator => {
+                            // On est dans le cas ?(o) ou ?(?o) or une opération à forcément une
+                            // opérande à gauche.
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
                         }
-                        ParseState::Normal => {
+                        ParseState::Constant => {
+                            // On est dans le cas ?oa
                             assert_eq!(Some(ParseStackItem::Operator(op)), stack.pop());
                             assert_eq!(Some(ParseStackItem::Parenthesis), stack.pop());
                             Self::build_from_operator(op, formulas)?;
@@ -304,24 +389,49 @@ impl Formula {
                     },
                     ZOT::Two(left, right) => match state {
                         ParseState::BeginingANewGroup => {
-                            return Err(TokenizationError::InternalError)
+                            // On est dans la situation (?L?R) avec un seul lexème après la parenthèse...
+                            // Sûrement une erreur dans l'assignation de l'état.
+                            return Err(TokenizationError::InternalError(3));
                         }
-                        ParseState::Normal => match Operators::cmp(&left, &right) {
-                            Priority::Less => {
-                                assert_eq!(Some(ParseStackItem::Operator(right)), stack.pop());
-                                Self::build_from_operator(right, formulas)?;
-                                *regime = Regime::Eat;
+                        ParseState::Operator => {
+                            // On est dans le cas ?(?L?R) or R à forcément une
+                            // opérande à gauche.
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
+                        }
+                        ParseState::Constant => {
+                            match Operators::cmp(&left, &right) {
+                                Priority::Less => {
+                                    // On est dans la situation ?(?L?Ra). On mange ?Ra.
+                                    assert_eq!(Some(ParseStackItem::Operator(right)), stack.pop());
+                                    Self::build_from_operator(right, formulas)?;
+                                    *regime = Regime::Eat;
+                                }
+                                Priority::More => {
+                                    // right n'est pas unaire
+                                    debug_assert!(!right.is_unary());
+                                    // Donc on est dans le cas ?(?LaRb)
+                                    // En enlevant R de la pile et b des formules
+                                    debug_assert_eq!(
+                                        Some(ParseStackItem::Operator(right)),
+                                        stack.pop()
+                                    );
+                                    let rightest = formulas
+                                        .pop()
+                                        .ok_or(TokenizationError::AFormulaIsMissing)?;
+                                    // On se retrouve dans la situation ? L a, et on fait:
+                                    debug_assert_eq!(
+                                        Some(ParseStackItem::Operator(left)),
+                                        stack.pop()
+                                    );
+                                    Self::build_from_operator(left, formulas)?;
+                                    // On remet l'opérateur de droite et la formule
+                                    stack.push(ParseStackItem::Operator(right));
+                                    formulas.push(rightest);
+                                    *regime = Regime::ForceEat; // On doit tout manger
+                                                                // state ne change pas.
+                                }
                             }
-                            Priority::More => {
-                                let len: usize = stack.len();
-                                stack.swap(len - 2, len - 1);
-                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
-                                let rightest_formula = formulas.pop().unwrap();
-                                Self::build_from_operator(left, formulas)?;
-                                formulas.push(rightest_formula);
-                                *regime = Regime::Eat;
-                            }
-                        },
+                        }
                     },
                 },
                 Regime::EndEat => match Self::get_last_two_ops_from_stack(stack) {
@@ -329,7 +439,10 @@ impl Formula {
                         ParseState::BeginingANewGroup => {
                             return Err(TokenizationError::EmptyParenthesis)
                         }
-                        ParseState::Normal => {
+                        ParseState::Operator => {
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
+                        }
+                        ParseState::Constant => {
                             *regime = Regime::Stop;
                         }
                     },
@@ -337,7 +450,10 @@ impl Formula {
                         ParseState::BeginingANewGroup => {
                             return Err(TokenizationError::InvalidSubFormula)
                         }
-                        ParseState::Normal => {
+                        ParseState::Operator => {
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
+                        }
+                        ParseState::Constant => {
                             assert_eq!(Some(ParseStackItem::Operator(op)), stack.pop());
                             Self::build_from_operator(op, formulas)?;
                             *regime = Regime::EndEat;
@@ -345,22 +461,36 @@ impl Formula {
                     },
                     ZOT::Two(left, right) => match state {
                         ParseState::BeginingANewGroup => {
-                            return Err(TokenizationError::InternalError)
+                            return Err(TokenizationError::InternalError(4))
                         }
-                        ParseState::Normal => match Operators::cmp(&left, &right) {
+                        ParseState::Operator => {
+                            return Err(TokenizationError::OperatorWithoutRightHandside);
+                        }
+                        ParseState::Constant => match Operators::cmp(&left, &right) {
                             Priority::Less => {
                                 assert_eq!(Some(ParseStackItem::Operator(right)), stack.pop());
                                 Self::build_from_operator(right, formulas)?;
                                 *regime = Regime::EndEat;
                             }
                             Priority::More => {
-                                let len: usize = stack.len();
-                                stack.swap(len - 2, len - 1);
-                                assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
-                                let rightest_formula = formulas.pop().unwrap();
+                                // right n'est pas unaire
+                                debug_assert!(!right.is_unary());
+                                // Donc on est dans le cas ?LaRb
+                                // En enlevant R de la pile et b des formules
+                                debug_assert_eq!(
+                                    Some(ParseStackItem::Operator(right)),
+                                    stack.pop()
+                                );
+                                let rightest =
+                                    formulas.pop().ok_or(TokenizationError::AFormulaIsMissing)?;
+                                // On se retrouve dans la situation ?La, et on fait:
+                                debug_assert_eq!(Some(ParseStackItem::Operator(left)), stack.pop());
                                 Self::build_from_operator(left, formulas)?;
-                                formulas.push(rightest_formula);
-                                *regime = Regime::EndEat;
+                                // On remet l'opérateur de droite et la formule
+                                stack.push(ParseStackItem::Operator(right));
+                                formulas.push(rightest);
+                                *regime = Regime::EndEat; // On doit tout manger
+                                                          // state ne change pas.
                             }
                         },
                     },
@@ -369,6 +499,7 @@ impl Formula {
         }
         Ok(())
     }
+
     /// Transform `formulas` according to `operator` and the *last* one/two formulae in the stack.
     fn build_from_operator(
         operator: Operators,
@@ -437,8 +568,168 @@ mod tests {
 
     #[test]
     fn simple_formula() {
-        // ¬,∧,∨,⇒,⇐,⇔
         let input = "c∧(a∨b)";
-        dbg!(Formula::read(input).unwrap());
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::And(
+                Box::new(Formula::Variable('c')),
+                Box::new(Formula::Or(
+                    Box::new(Formula::Variable('a')),
+                    Box::new(Formula::Variable('b'))
+                ))
+            ),
+            f
+        );
+    }
+    #[test]
+    fn complex_formula() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "¬(a)⇒(a∨b)⇒(¬q∨¬r∧s⇔t⇔d)";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Implies(
+                Box::new(Formula::Not(Box::new(Formula::Variable('a')))),
+                Box::new(Formula::Implies(
+                    Box::new(Formula::Or(
+                        Box::new(Formula::Variable('a')),
+                        Box::new(Formula::Variable('b'))
+                    )),
+                    Box::new(Formula::Equiv(
+                        Box::new(Formula::Equiv(
+                            Box::new(Formula::Or(
+                                Box::new(Formula::Not(Box::new(Formula::Variable('q')))),
+                                Box::new(Formula::And(
+                                    Box::new(Formula::Not(Box::new(Formula::Variable('r')))),
+                                    Box::new(Formula::Variable('s'))
+                                ))
+                            )),
+                            Box::new(Formula::Variable('t'))
+                        )),
+                        Box::new(Formula::Variable('d')),
+                    ))
+                ))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn single_variable() {
+        let input = "a";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(Formula::Variable('a'), f);
+    }
+
+    #[test]
+    fn simple_or() {
+        let input = "b∨c";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Or(
+                Box::new(Formula::Variable('b')),
+                Box::new(Formula::Variable('c'))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn simple_and() {
+        let input = "d∧e";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::And(
+                Box::new(Formula::Variable('d')),
+                Box::new(Formula::Variable('e'))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn simple_implies() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "f⇒g";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Implies(
+                Box::new(Formula::Variable('f')),
+                Box::new(Formula::Variable('g'))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn simple_rlimplies() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "h⇐i";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::RLImplies(
+                Box::new(Formula::Variable('h')),
+                Box::new(Formula::Variable('i'))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn simple_equiv() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "j⇔k";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Equiv(
+                Box::new(Formula::Variable('j')),
+                Box::new(Formula::Variable('k'))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn simple_not() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "¬l";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(Formula::Not(Box::new(Formula::Variable('l'))), f);
+    }
+
+    #[test]
+    fn implies_right_associativity() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "m⇒n⇒p";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Implies(
+                Box::new(Formula::Variable('m')),
+                Box::new(Formula::Implies(
+                    Box::new(Formula::Variable('n')),
+                    Box::new(Formula::Variable('p'))
+                ))
+            ),
+            f
+        );
+    }
+
+    #[test]
+    fn parsing_priorities() {
+        // ¬,∧,∨,⇒,⇐,⇔
+        let input = "¬q∨¬r∧s⇔t";
+        let f = Formula::read(input).unwrap();
+        assert_eq!(
+            Formula::Equiv(
+                Box::new(Formula::Or(
+                    Box::new(Formula::Not(Box::new(Formula::Variable('q')))),
+                    Box::new(Formula::And(
+                        Box::new(Formula::Not(Box::new(Formula::Variable('r')))),
+                        Box::new(Formula::Variable('s'))
+                    ))
+                )),
+                Box::new(Formula::Variable('t'))
+            ),
+            f
+        );
     }
 }
