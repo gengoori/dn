@@ -1,4 +1,4 @@
-use crate::formula::Formula;
+use crate::formula::{Formula,TokenizationError};
 use crate::justif::Jusitification;
 
 pub enum RecordError {
@@ -10,6 +10,8 @@ pub enum RecordError {
     InvalidCtxt,
     /// There are too many fields
     TooMuch,
+    /// Error parsing the formula
+    InvalidFormula(TokenizationError),
 }
 
 pub struct Record {
@@ -53,7 +55,23 @@ impl Record {
 
     /// Reads a statement
     fn read_stmt(input: &str) -> Result<Statement, RecordError> {
-        todo!()
+        match input.strip_prefix("Donc ") {
+            Some(input) => {
+                let f = Formula::read(input).map_err(|e| RecordError::InvalidFormula(e))?;
+                Ok(Statement::Donc(f))
+            }
+            None => match input.strip_prefix("Supposons ") {
+                Some(input) => {
+                    let f = Formula::read(input).map_err(|e| RecordError::InvalidFormula(e))?;
+                    Ok(Statement::Supposons(f))
+                },
+                None => {
+                    let f = Formula::read(input).map_err(|e| RecordError::InvalidFormula(e))?;
+                    Ok(Statement::Simple(f))
+                }
+            }
+            
+        }
     }
 
     /// Reads the justification
