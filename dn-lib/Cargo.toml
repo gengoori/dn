@@ -1,13 +1,14 @@
 [package]
-name = "bbk-dn-lib"
-version = "0.1.0"
+name = "dn-lib"
+version = "0.0.0"
 authors = ["tartasprint"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "dn_lib"
+name = "dnlib"
 path = "src/lib.rs"
 
 [dependencies]
+thiserror = "1.0.40"

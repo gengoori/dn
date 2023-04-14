@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use crate::{
     formula::Formula,
     justif::Jusitification,
@@ -10,155 +12,219 @@ pub struct ReadError {
     content: crate::record::RecordError,
 }
 
-#[derive(Debug)]
+#[derive(Error,Debug)]
 pub enum SemanticError {
     /// Internal error. Shouldn't happen
+    #[error("Internal error. Shouldn't happen")]
     InternalError,
     /// Id should match the record's position
+    #[error("Id should match the record's position")]
     IncorrectId,
-    /// A Supposons should have the same amount of context as the previous
-    /// statement, plus one term.
+    /// A Supposons should have the same amount of context as the previous statement, plus one term.
+    #[error("A Supposons should have the same amount of context as the previous statement, plus one term.")]
     SuppCtxtOneMoreThenBefore,
-    /// A Supposons should share the same context as the previous statement,
-    /// except for the last term.
+    /// A Supposons should share the same context as the previous statement, except for the last term.
+    #[error("A Supposons should share the same context as the previous statement, except for the last term.")]
     SuppCtxtSameAsBefore,
-    /// The last term of the context of a Supposons should be the id of the
-    /// record.
+    /// The last term of the context of a Supposons should be the id of the record.
+    #[error("The last term of the context of a Supposons should be the id of the record.")]
     SuppCtxtLastIsId,
     /// A Supposons has to justified by a Hyp
+    #[error("A Supposons has to justified by a Hyp")]
     SuppJustIsHyp,
 
     /// Cannot start with a Donc statement
+    #[error("Cannot start with a Donc statement")]
     DoncNotFirst,
     /// Donc context have one term less than the previous statement.
+    #[error("Donc context have one term less than the previous statement.")]
     DoncCtxtOneLessThenBefore,
     /// Donc context should be the same as that of the previous statement.
+    #[error("Donc context should be the same as that of the previous statement.")]
     DoncCtxtSameAsBefore,
     /// Donc hypothesis has to be a different statement than the consequence.
+    #[error("Donc hypothesis has to be a different statement than the consequence.")]
     DoncHypDifCons,
     /// Donc hypothesis has to match the linked hypothesis
+    #[error("Donc hypothesis has to match the linked hypothesis")]
     DoncHypNotMatching,
     /// Donc consequence has to match the linked consequence
+    #[error("Donc consequence has to match the linked consequence")]
     DoncConsNotMatching,
     /// Donc formula should be an implies.
+    #[error("Donc formula should be an implies.")]
     DoncFormulaIsImplies,
     /// Donc should have implication introduction justification
+    #[error("Donc should have implication introduction justification")]
     DoncJustifIsIImpl,
 
     /// Simple shouldn't start a proof
+    #[error("Simple shouldn't start a proof")]
     SimpleIsFirst,
     /// Simple context should be the same as the statement before
+    #[error("Simple context should be the same as the statement before")]
     SimpleCtxtSameAsBefore,
 
     /// IOrL right reference should be lesser than id
+    #[error("IOrL right reference should be lesser than id")]
     IOrLPosLesser,
     /// IOrL right statement should be compatible
+    #[error("IOrL right statement should be compatible")]
     IOrLIncompatibleCtxt,
     /// IOrL left formula shoud match
+    #[error("IOrL left formula shoud match")]
     IOrLLeftNotMatching,
     /// IOrL right formula shoud match
+    #[error("IOrL right formula shoud match")]
     IOrLRightNotMatching,
     /// IOrL formula should be an Or
+    #[error("IOrL formula should be an Or")]
     IOrLFormulaIsOr,
 
     /// IOrR right reference should be lesser than id
+    #[error("IOrR right reference should be lesser than id")]
     IOrRPosLesser,
     /// IOrR right statement should be compatible
+    #[error("IOrR right statement should be compatible")]
     IOrRIncompatibleCtxt,
     /// IOrR left formula shoud match
+    #[error("IOrR left formula shoud match")]
     IOrRLeftNotMatching,
     /// IOrR right formula shoud match
+    #[error("IOrR right formula shoud match")]
     IOrRRightNotMatching,
     /// IOrR formula should be an Or
+    #[error("IOrR formula should be an Or")]
     IOrRFormulaIsOr,
 
     /// EOr a->c reference should be lesser than id
+    #[error("EOr a->c reference should be lesser than id")]
     EOrA2CPosLesser,
     /// EOr b->c reference should be lesser than id
+    #[error("EOr b->c reference should be lesser than id")]
     EOrB2CPosLesser,
     /// EOr avb reference should be lesser than id
+    #[error("EOr avb reference should be lesser than id")]
     EOrAOBPosLesser,
     /// EOr a->c statement should be compatible
+    #[error("EOr a->c statement should be compatible")]
     EOrA2CIncompatibleCtxt,
     /// EOr b->c statement should be compatible
+    #[error("EOr b->c statement should be compatible")]
     EOrB2CIncompatibleCtxt,
     /// EOr a->c statement should be compatible
+    #[error("EOr a->c statement should be compatible")]
     EOrAOBIncompatibleCtxt,
     /// EOr left formula shoud match
+    #[error("EOr left formula shoud match")]
     EOrLeftNotMatching,
     /// EOr right formula shoud match
+    #[error("EOr right formula shoud match")]
     EOrRightNotMatching,
     /// EOr formula should be an Or
+    #[error("EOr formula should be an Or")]
     EOrFormulaIsOr,
     /// EOr a formula should be the same in avb and a->c
+    #[error("EOr a formula should be the same in avb and a->c")]
     EOrAFormulaNotMatching,
     /// EOr b formula should be the same in avb and b->c
+    #[error("EOr b formula should be the same in avb and b->c")]
     EOrBFormulaNotMatching,
     /// EOr c formula should be the same in b->c and a->c
+    #[error("EOr c formula should be the same in b->c and a->c")]
     EOrCFormulaNotMatchingConsequences,
     /// EOr c formula should be the same in the eliminated conclusion
+    #[error("EOr c formula should be the same in the eliminated conclusion")]
     EOrCFormulaNotMatchingEliminated,
     /// EOr formulas should be of the form *->*, *->* and *v*
+    #[error("EOr formulas should be of the form *->*, *->* and *v*")]
     EOrFormulasNotRightKind,
 
     /// IAnd left reference should be lesser than id
+    #[error("IAnd left reference should be lesser than id")]
     IAndLeftPosLesser,
     /// IAnd right reference should be lesser than id
+    #[error("IAnd right reference should be lesser than id")]
     IAndRightPosLesser,
     /// IAnd left statement should be compatible
+    #[error("IAnd left statement should be compatible")]
     IAndLeftIncompatibleCtxt,
     /// IAnd right statement should be compatible
+    #[error("IAnd right statement should be compatible")]
     IAndRightIncompatibleCtxt,
     /// IAnd left formula shoud match
+    #[error("IAnd left formula shoud match")]
     IAndLeftNotMatching,
     /// IAnd right formula shoud match
+    #[error("IAnd right formula shoud match")]
     IAndRightNotMatching,
     /// IAnd formula should be an And
+    #[error("IAnd formula should be an And")]
     IAndFormulaIsAnd,
 
     /// EAnd reference should be lesser than id
+    #[error("EAnd reference should be lesser than id")]
     EAndPosLesser,
     /// EAnd statement should be compatible
+    #[error("EAnd statement should be compatible")]
     EAndIncompatibleCtxt,
     /// EAnd formula shoud match
+    #[error("EAnd formula shoud match")]
     EAndNotMatching,
     /// EAndF formula should be an And
+    #[error("EAndF formula should be an And")]
     EAndFormulaIsAnd,
 
     /// Hyp may not justify a simple statement
+    #[error("Hyp may not justify a simple statement")]
     HypNotSimple,
     /// IImpl may not justify a simple statement
+    #[error("IImpl may not justify a simple statement")]
     IImplNotSimple,
 
     /// EImpl hyp reference should be lesser than id
+    #[error("EImpl hyp reference should be lesser than id")]
     EImplHypPosLesser,
     /// EImpl impl reference should be lesser than id
+    #[error("EImpl impl reference should be lesser than id")]
     EImplImplPosLesser,
     /// EImpl hyp statement should be compatible
+    #[error("EImpl hyp statement should be compatible")]
     EImplHypIncompatibleCtxt,
     /// EImpl impl statement should be compatible
+    #[error("EImpl impl statement should be compatible")]
     EImplImplIncompatibleCtxt,
     /// EImpl hyp formula shoud match
+    #[error("EImpl hyp formula shoud match")]
     EImplHypNotMatching,
     /// EImpl impl formula shoud match
+    #[error("EImpl impl formula shoud match")]
     EImplImplNotMatching,
     /// EImpl formula should be an Impl
+    #[error("EImpl formula should be an Impl")]
     EImplFormulaIsImpl,
 
     /// Efq reference should be lesser than id
+    #[error("Efq reference should be lesser than id")]
     EfqPosLesser,
     /// Efq statement should be compatible
+    #[error("Efq statement should be compatible")]
     EfqIncompatibleCtxt,
     /// Efq formula should be a Bot
+    #[error("Efq formula should be a Bot")]
     EfqFormulaIsBot,
 
     /// Raa reference should be lesser than id
+    #[error("Raa reference should be lesser than id")]
     RaaPosLesser,
     /// Raa statement should be compatible
+    #[error("Raa statement should be compatible")]
     RaaIncompatibleCtxt,
     /// Raa formula should be a NotNot
+    #[error("Raa formula should be a NotNot")]
     RaaFormulaIsNotNot,
     /// Raa formula shoud match
+    #[error("Raa formula shoud match")]
     RaaNotMatching,
 }
 
@@ -256,16 +322,16 @@ impl Proof {
 
     /// Checks the proof for record 0..=id. Returns Err if the provided id
     /// is invalid.
-    pub fn check(&mut self) -> Result<(),()> {
-        if ! self.records.is_empty() {
-            self.check_up_to(self.records.len()-1)
-        } else {
-            Ok(())
-        }
+    pub fn check(&mut self) {
+        self.check_up_to(self.records.len()-1).unwrap()
     }
 
     pub fn state(&self) -> &CheckUpResult{
         &self.valid
+    }
+
+    pub fn into_state(self) -> CheckUpResult{
+        self.valid
     }
 
     fn check_single_record(&self, id: usize) -> Result<(), SemanticError> {

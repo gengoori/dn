@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bbk-dn-lib = {path = "../dn-lib"}
+dn-lib = {path = "../dn-lib"}
 clap = { version = "4.0", features = ["derive"] }

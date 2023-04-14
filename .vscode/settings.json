@@ -8,7 +8,4 @@
         "jacoco.xml",
         "coverage.cobertura.xml"
     ],
-    "rust-analyzer.linkedProjects": [
-        "./dn-lib/Cargo.toml"
-    ],
 }

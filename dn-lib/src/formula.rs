@@ -152,9 +152,9 @@ impl Formula {
         let mut formulas: Vec<Formula> = Vec::new();
         let mut regime = Regime::Stop;
         let mut state = ParseState::BeginingANewGroup;
-        eprintln!("Tokenization done !");
+        //eprintln!("Tokenization done !");
         for l in lexemes {
-            eprintln!("Got a new lexeme");
+            //eprintln!("Got a new lexeme");
             Self::read_lexeme(l, &mut regime, &mut state, &mut stack, &mut formulas)?;
             Self::eat(&mut stack, &mut state, &mut regime, &mut formulas)?;
         }
@@ -247,7 +247,7 @@ impl Formula {
         formulas: &mut Vec<Formula>,
     ) -> Result<(), TokenizationError> {
         loop {
-            eprintln!("Regime : {:?}", regime);
+            /*eprintln!("Regime : {:?}", regime);
             eprintln!("State : {:?}", state);
             eprintln!("Stack :");
             for i in stack.iter() {
@@ -256,7 +256,7 @@ impl Formula {
             eprintln!("Formula :");
             for i in formulas.iter() {
                 eprintln!("   {:?}", i)
-            }
+            }*/
             match regime {
                 Regime::Stop => break,
                 Regime::Eat => match Self::get_last_two_ops_from_stack(stack) {

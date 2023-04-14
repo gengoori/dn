@@ -1,0 +1,3 @@
+0;0;Supposons b;Hyp
+1;0;a∨b;IOrR 0 b
+2;;Donc b⇒a∨b;IImpl
