@@ -2,7 +2,8 @@ use std::num::ParseIntError;
 
 use crate::formula::{Formula, TokenizationError};
 
-#[derive(Debug)]
+#[allow(non_camel_case_types)]
+#[derive(Debug, PartialEq)]
 pub enum ReadError {
     InputEmpty,
     UnknownRule,
@@ -39,7 +40,7 @@ pub enum ReadError {
     Invalid_In_Raa_Reference(ParseIntError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Jusitification {
     /// Introduction of Or (new formula on left)
     IOrL(usize, Formula),
@@ -184,5 +185,33 @@ impl Jusitification {
             Some(_) => Err(ReadError::InputTooLarge),
             None => Ok(r),
         }
+    }
+}
+
+#[allow(non_snake_case)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn IOrL_legal() {
+        let input = "IOrL 1 ¬x";
+        let r = Jusitification::read(input);
+        assert_eq!(r, Ok(Jusitification::IOrL(1, Formula::Not(Box::new(Formula::Variable('x'))))));
+    }
+
+    #[test]
+    fn IOrL_alone() {
+        let input = "IOrL";
+        let r = Jusitification::read(input);
+        assert_eq!(r,Err(ReadError::Missing_In_IOrL_LeftPos));
+    }
+
+
+    #[test]
+    fn IOrL_invalid_pos() {
+        let input = "IOrL -1";
+        let r = Jusitification::read(input);
+        matches!(r,Err(ReadError::Invalid_In_IOrL_LeftPos(_)));
     }
 }

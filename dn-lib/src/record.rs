@@ -20,10 +20,10 @@ pub enum RecordError {
 
 #[derive(Debug)]
 pub struct Record {
-    id: usize,
-    ctxt: Vec<usize>,
-    stmt: Statement,
-    justif: Jusitification,
+    pub id: usize,
+    pub ctxt: Vec<usize>,
+    pub stmt: Statement,
+    pub justif: Jusitification,
 }
 
 impl Record {
@@ -54,6 +54,7 @@ impl Record {
     fn read_ctxt(input: &str) -> Result<Vec<usize>, RecordError> {
         input
             .split(|c: char| c == ',')
+            .filter(|slc| ! slc.is_empty())
             .map(|slc: &str| slc.parse::<usize>().map_err(|_| RecordError::InvalidCtxt))
             .collect()
     }
@@ -94,14 +95,52 @@ pub enum Statement {
     Simple(Formula),
 }
 
+impl Statement {
+    pub fn get_formula(&self) -> &Formula {
+        match self {
+            Statement::Supposons(formula) => formula,
+            Statement::Donc(formula) => formula,
+            Statement::Simple(formula) => formula,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn simple() {
+    fn simple_simple_stmt() {
+        let input = "1;2,3;A;EImpl 3 4";
+        let r = Record::read_record(input);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn simple_supposons_stmt() {
+        let input = "1;2,3;Supposons A;EImpl 3 4";
+        let r = Record::read_record(input);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn simple_donc_stmt() {
         let input = "1;2,3;Donc A;EImpl 3 4";
         let r = Record::read_record(input);
-        dbg!(r);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn too_much_to_read_v1() {
+        let input = "1;2,3;Donc A;EImpl 3 4 ddddddd";
+        let r = Record::read_record(input);
+        assert!(r.is_err())
+    }
+
+    #[test]
+    fn too_much_to_read_v2() {
+        let input = "1;2,3;Donc A;EImpl 3 4;ddddddd";
+        let r = Record::read_record(input);
+        assert!(r.is_err())
     }
 }

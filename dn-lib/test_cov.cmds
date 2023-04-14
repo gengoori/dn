@@ -1,0 +1,8 @@
+rm output* lcov.info
+RUSTFLAGS='-Cinstrument-coverage' \
+LLVM_PROFILE_FILE='output-%m.profraw' \
+cargo test --lib
+cargo profdata -- merge -sparse output-*.profraw -o output.profdata
+cargo cov -- export --format=lcov \
+--use-color --instr-profile=output.profdata \
+--object target/debug/deps/bbk_lib-d4fc4d7d155e19cc > lcov.info
