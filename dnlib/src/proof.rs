@@ -6,13 +6,15 @@ use crate::{
     record::{Record, Statement},
 };
 
-#[derive(Debug)]
+#[derive(Error,Debug)]
+#[error("At {stmt}: {content}")]
 pub struct ReadError {
-    stmt: usize,
-    content: crate::record::RecordError,
+    pub stmt: usize,
+    #[source]
+    pub content: crate::record::RecordError,
 }
 
-#[derive(Error,Debug)]
+#[derive(Error, Debug)]
 pub enum SemanticError {
     /// Internal error. Shouldn't happen
     #[error("Internal error. Shouldn't happen")]
@@ -71,11 +73,11 @@ pub enum SemanticError {
     /// IOrL right statement should be compatible
     #[error("IOrL right statement should be compatible")]
     IOrLIncompatibleCtxt,
-    /// IOrL left formula shoud match
-    #[error("IOrL left formula shoud match")]
+    /// IOrL left formula should match
+    #[error("IOrL left formula should match")]
     IOrLLeftNotMatching,
-    /// IOrL right formula shoud match
-    #[error("IOrL right formula shoud match")]
+    /// IOrL right formula should match
+    #[error("IOrL right formula should match")]
     IOrLRightNotMatching,
     /// IOrL formula should be an Or
     #[error("IOrL formula should be an Or")]
@@ -87,11 +89,11 @@ pub enum SemanticError {
     /// IOrR right statement should be compatible
     #[error("IOrR right statement should be compatible")]
     IOrRIncompatibleCtxt,
-    /// IOrR left formula shoud match
-    #[error("IOrR left formula shoud match")]
+    /// IOrR left formula should match
+    #[error("IOrR left formula should match")]
     IOrRLeftNotMatching,
-    /// IOrR right formula shoud match
-    #[error("IOrR right formula shoud match")]
+    /// IOrR right formula should match
+    #[error("IOrR right formula should match")]
     IOrRRightNotMatching,
     /// IOrR formula should be an Or
     #[error("IOrR formula should be an Or")]
@@ -115,11 +117,11 @@ pub enum SemanticError {
     /// EOr a->c statement should be compatible
     #[error("EOr a->c statement should be compatible")]
     EOrAOBIncompatibleCtxt,
-    /// EOr left formula shoud match
-    #[error("EOr left formula shoud match")]
+    /// EOr left formula should match
+    #[error("EOr left formula should match")]
     EOrLeftNotMatching,
-    /// EOr right formula shoud match
-    #[error("EOr right formula shoud match")]
+    /// EOr right formula should match
+    #[error("EOr right formula should match")]
     EOrRightNotMatching,
     /// EOr formula should be an Or
     #[error("EOr formula should be an Or")]
@@ -152,11 +154,11 @@ pub enum SemanticError {
     /// IAnd right statement should be compatible
     #[error("IAnd right statement should be compatible")]
     IAndRightIncompatibleCtxt,
-    /// IAnd left formula shoud match
-    #[error("IAnd left formula shoud match")]
+    /// IAnd left formula should match
+    #[error("IAnd left formula should match")]
     IAndLeftNotMatching,
-    /// IAnd right formula shoud match
-    #[error("IAnd right formula shoud match")]
+    /// IAnd right formula should match
+    #[error("IAnd right formula should match")]
     IAndRightNotMatching,
     /// IAnd formula should be an And
     #[error("IAnd formula should be an And")]
@@ -168,8 +170,8 @@ pub enum SemanticError {
     /// EAnd statement should be compatible
     #[error("EAnd statement should be compatible")]
     EAndIncompatibleCtxt,
-    /// EAnd formula shoud match
-    #[error("EAnd formula shoud match")]
+    /// EAnd formula should match
+    #[error("EAnd formula should match")]
     EAndNotMatching,
     /// EAndF formula should be an And
     #[error("EAndF formula should be an And")]
@@ -194,11 +196,11 @@ pub enum SemanticError {
     /// EImpl impl statement should be compatible
     #[error("EImpl impl statement should be compatible")]
     EImplImplIncompatibleCtxt,
-    /// EImpl hyp formula shoud match
-    #[error("EImpl hyp formula shoud match")]
+    /// EImpl hyp formula should match
+    #[error("EImpl hyp formula should match")]
     EImplHypNotMatching,
-    /// EImpl impl formula shoud match
-    #[error("EImpl impl formula shoud match")]
+    /// EImpl impl formula should match
+    #[error("EImpl impl formula should match")]
     EImplImplNotMatching,
     /// EImpl formula should be an Impl
     #[error("EImpl formula should be an Impl")]
@@ -223,9 +225,22 @@ pub enum SemanticError {
     /// Raa formula should be a NotNot
     #[error("Raa formula should be a NotNot")]
     RaaFormulaIsNotNot,
-    /// Raa formula shoud match
-    #[error("Raa formula shoud match")]
+    /// Raa formula should match
+    #[error("Raa formula should match")]
     RaaNotMatching,
+
+    /// Rwrt reference should be lesser than id
+    #[error("Rwrt reference should be lesser than id")]
+    RwrtPosLesser,
+    /// Rwrt statement should be compatible
+    #[error("Rwrt statement should be compatible")]
+    RwrtIncompatibleCtxt,
+    /// Rwrt formula should be a NotNot
+    #[error("Rwrt formula should be a NotNot")]
+    RwrtFormulaIsNotNot,
+    /// Rwrt formula should match
+    #[error("Rwrt formula should match")]
+    RwrtNotMatching,
 }
 
 #[derive(Debug)]
@@ -282,14 +297,14 @@ impl Proof {
     /// Adds a record to the proof
     pub fn add_record(&mut self, record: Record) {
         if let CheckUpResult::Valid = self.valid {
-            self.valid=CheckUpResult::ValidUntil(self.records.len())
+            self.valid = CheckUpResult::ValidUntil(self.records.len())
         }
         self.records.push(record);
     }
 
     /// Checks the proof for record 0..=id. Returns Err if the provided id
     /// is invalid.
-    pub fn check_up_to(&mut self, id: usize) -> Result<(),()> {
+    pub fn check_up_to(&mut self, id: usize) -> Result<(), ()> {
         if id >= self.records.len() {
             return Err(());
         } else {
@@ -310,11 +325,14 @@ impl Proof {
             }
 
             self.valid = if erred {
-                CheckUpResult::SemanticErrors { first_error: until, errors }
+                CheckUpResult::SemanticErrors {
+                    first_error: until,
+                    errors,
+                }
             } else if id + 1 == self.records.len() {
                 CheckUpResult::Valid
             } else {
-                CheckUpResult::ValidUntil(id+1)
+                CheckUpResult::ValidUntil(id + 1)
             };
             return Ok(());
         }
@@ -323,14 +341,14 @@ impl Proof {
     /// Checks the proof for record 0..=id. Returns Err if the provided id
     /// is invalid.
     pub fn check(&mut self) {
-        self.check_up_to(self.records.len()-1).unwrap()
+        self.check_up_to(self.records.len() - 1).unwrap()
     }
 
-    pub fn state(&self) -> &CheckUpResult{
+    pub fn state(&self) -> &CheckUpResult {
         &self.valid
     }
 
-    pub fn into_state(self) -> CheckUpResult{
+    pub fn into_state(self) -> CheckUpResult {
         self.valid
     }
 
@@ -653,14 +671,27 @@ impl Proof {
                             Err(SemanticError::RaaFormulaIsNotNot)
                         }
                     }
+                    Jusitification::Rwrt(orig_pos) => {
+                        if *orig_pos >= id {
+                            return Err(SemanticError::RwrtPosLesser);
+                        }
+                        let orig = &self.records[*orig_pos];
+                        if !check_ctxt_compatibility(&rec.ctxt, &orig.ctxt) {
+                            return Err(SemanticError::RwrtIncompatibleCtxt);
+                        }
+                        if formula.clone().normalize() == orig.stmt.get_formula().clone().normalize() {
+                            Ok(())
+                        } else {
+                            Err(SemanticError::RwrtNotMatching)
+                        }
+                    }
                 }
             }
         }
     }
- 
 }
 
-fn check_ctxt_compatibility(current: &[usize], compatible: &[usize]) -> bool {
+fn check_ctxt_compatibility(compatible: &[usize], current: &[usize]) -> bool {
     if current.len() > compatible.len() {
         false
     } else {

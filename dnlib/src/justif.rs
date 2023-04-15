@@ -1,43 +1,82 @@
 use std::num::ParseIntError;
 
+use thiserror::Error;
+
 use crate::formula::{Formula, TokenizationError};
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, PartialEq)]
+#[derive(Error,Debug, PartialEq)]
 pub enum ReadError {
+    #[error("empty")]
     InputEmpty,
+    #[error("unknown rule")]
     UnknownRule,
+    #[error("the input is too large")]
     InputTooLarge,
+    #[error("IOrL is missing the position of right formula to be inserted")]
     Missing_In_IOrL_LeftPos,
+    #[error("IOrL is provided a position of the right formula to be inserted that is not a valid number: {0}")]
     Invalid_In_IOrL_LeftPos(ParseIntError),
+    #[error("IOrL is missing the left formula to be inserted")]
     Missing_In_IOrL_Formula,
+    #[error("IOrL is provided a left formula to be inserted that is not a valid formula: {0}")]
     Invalid_In_IOrL_Formula(TokenizationError),
+    #[error("IOrR is missing the position of the left formula to be inserted")]
     Missing_In_IOrR_RightPos,
+    #[error("IOrR is provided a position of the left formula to be inserted that is not a valid number: {0}")]
     Invalid_In_IOrR_RightPos(ParseIntError),
+    #[error("IOrR is missing the right formula to be inserted")]
     Missing_In_IOrR_Formula,
+    #[error("IOrR is provided a right formula to be inserted that is not a valid formula: {0}")]
     Invalid_In_IOrR_Formula(TokenizationError),
+    #[error("EOr is missing the position of the a->c formula")]
     Missing_In_EOr_A_to_C,
+    #[error("EOr is provided a position of the a->c formula that is not a valid number: {0}")]
     Invalid_In_EOr_A_to_C(ParseIntError),
+    #[error("EOr is missing the position of the b->c formula")]
     Missing_In_EOr_B_to_C,
+    #[error("EOr is provided a position of the b->c formula that is not a valid number: {0}")]
     Invalid_In_EOr_B_to_C(ParseIntError),
+    #[error("EOr is missing the position of a∨b formula")]
     Missing_In_EOr_A_or_B,
+    #[error("EOr is provided a position of the a∨b formula that is not a valid number: {0}")]
     Invalid_In_EOr_A_or_B(ParseIntError),
+    #[error("IAnd is missing the position of the left formula to be inserted")]
     Missing_In_IAnd_Left,
+    #[error("IAnd is provided a position of the left formula to be inserted that is not a valid number: {0}")]
     Invalid_In_IAnd_Left(ParseIntError),
+    #[error("IAnd is missing the position of the right formula to be inserted")]
     Missing_In_IAnd_Right,
+    #[error("IAnd is provided a position of the right formula to be inserted that is not a valid number: {0}")]
     Invalid_In_IAnd_Right(ParseIntError),
+    #[error("EAndL is missing the position of the formula to be inserted")]
     Missing_In_EAndL_Reference,
+    #[error("EAndL is provided a position of the formula that is not a valid number: {0}")]
     Invalid_In_EAndL_Reference(ParseIntError),
+    #[error("EAndR is missing the position of the formula")]
     Missing_In_EAndR_Reference,
+    #[error("EAndR is provided a position of the formula that is not a valid number: {0}")]
     Invalid_In_EAndR_Reference(ParseIntError),
-    Missing_In_IImpl_Hyp,
-    Invalid_In_IImpl_Hyp(ParseIntError),
-    Missing_In_IImpl_Implication,
-    Invalid_In_IImpl_Implication(ParseIntError),
+    #[error("EImpl is missing the position of the hypothesis formula")]
+    Missing_In_EImpl_Hyp,
+    #[error("EImpl is provided a position of the hypothesis formula that is not a valid number: {0}")]
+    Invalid_In_EImpl_Hyp(ParseIntError),
+    #[error("EImpl is missing the position of the implication formula")]
+    Missing_In_EImpl_Implication,
+    #[error("EImpl is provided a position of the implication formula that is not a valid number: {0}")]
+    Invalid_In_EImpl_Implication(ParseIntError),
+    #[error("Efq is missing the position of the bottom formula")]
     Missing_In_Efq_Reference,
+    #[error("Efq is provided a position of the bottom formula that is not a valid number: {0}")]
     Invalid_In_Efq_Reference(ParseIntError),
+    #[error("Raa is missing the position of the formula")]
     Missing_In_Raa_Reference,
+    #[error("Raa is provided a position of the formula that is not a valid number: {0}")]
     Invalid_In_Raa_Reference(ParseIntError),
+    #[error("Rwrt is missing the position of the formula")]
+    Missing_In_Rwrt_Reference,
+    #[error("Rwrt is provided a position of the formula that is not a valid number: {0}")]
+    Invalid_In_Rwrt_Reference(ParseIntError),
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,6 +107,8 @@ pub enum Jusitification {
     Efq(usize),
     /// Reductio ad absorbum
     Raa(usize),
+    /// Rewrite
+    Rwrt(usize)
 }
 
 impl Jusitification {
@@ -153,14 +194,14 @@ impl Jusitification {
             "EImpl" => {
                 let hyp = s
                     .next()
-                    .ok_or(ReadError::Missing_In_IImpl_Hyp)?
+                    .ok_or(ReadError::Missing_In_EImpl_Hyp)?
                     .parse::<usize>()
-                    .map_err(|err| ReadError::Invalid_In_IImpl_Hyp(err))?;
+                    .map_err(|err| ReadError::Invalid_In_EImpl_Hyp(err))?;
                 let implication = s
                     .next()
-                    .ok_or(ReadError::Missing_In_IImpl_Implication)?
+                    .ok_or(ReadError::Missing_In_EImpl_Implication)?
                     .parse::<usize>()
-                    .map_err(|err| ReadError::Invalid_In_IImpl_Implication(err))?;
+                    .map_err(|err| ReadError::Invalid_In_EImpl_Implication(err))?;
                 Ok(Self::EImpl { hyp, implication })
             }
             "Efq" => {
@@ -178,6 +219,14 @@ impl Jusitification {
                     .parse::<usize>()
                     .map_err(|err| ReadError::Invalid_In_Raa_Reference(err))?;
                 Ok(Self::Raa(reference))
+            }
+            "Rwrt" => {
+                let reference = s
+                    .next()
+                    .ok_or(ReadError::Missing_In_Rwrt_Reference)?
+                    .parse::<usize>()
+                    .map_err(|err| ReadError::Invalid_In_Rwrt_Reference(err))?;
+                Ok(Self::Rwrt(reference))
             }
             _ => Err(ReadError::UnknownRule),
         }?;

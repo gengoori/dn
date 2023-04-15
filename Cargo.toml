@@ -1,6 +1,6 @@
 [workspace]
 members= [
-    "dn-lib",
-    "dn-reader",
+    "dnlib",
+    "dnreader",
     "xtask",
 ]

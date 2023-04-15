@@ -7,5 +7,5 @@ license = "ISC"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dn-lib = {path = "../dn-lib"}
+dnlib = {path = "../dnlib"}
 clap = { version = "4.0", features = ["derive"] }

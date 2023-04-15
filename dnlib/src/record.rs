@@ -1,20 +1,28 @@
+use thiserror::Error;
+
 use crate::formula::{Formula,TokenizationError};
 use crate::justif::{Jusitification, ReadError as JusitifReadError};
 
-#[derive(Debug)]
+#[derive(Error,Debug)]
 pub enum RecordError {
     /// A field is missing
+    #[error("A field is missing")]
     MissingField,
     /// The id field is invalid
+    #[error("The id field is invalid")]
     InvalidId,
-    /// The ctxt field is invalid    
+    /// The ctxt field is invalid
+    #[error("The ctxt field is invalid")]
     InvalidCtxt,
     /// There are too many fields
+    #[error("There are too many fields")]
     TooMuch,
     /// Error parsing the formula
+    #[error("Error parsing the formula: {0}")]
     InvalidFormula(TokenizationError),
 
     /// Error parsing the justification
+    #[error("Error parsing the justification: {0}")]
     InvalidJustif(JusitifReadError),
 }
 
@@ -30,10 +38,10 @@ impl Record {
     /// Reads a record
     pub fn read_record(input: &str) -> Result<Self, RecordError> {
         let mut input = input.split(';');
-        let id = Self::read_id(input.next().ok_or(RecordError::MissingField)?)?;
-        let ctxt = Self::read_ctxt(input.next().ok_or(RecordError::MissingField)?)?;
-        let stmt = Self::read_stmt(input.next().ok_or(RecordError::MissingField)?)?;
-        let justif = Self::read_justif(input.next().ok_or(RecordError::MissingField)?)?;
+        let id = Self::read_id(input.next().ok_or(RecordError::MissingField)?.trim())?;
+        let ctxt = Self::read_ctxt(input.next().ok_or(RecordError::MissingField)?.trim())?;
+        let stmt = Self::read_stmt(input.next().ok_or(RecordError::MissingField)?.trim())?;
+        let justif = Self::read_justif(input.next().ok_or(RecordError::MissingField)?.trim())?;
         match input.next() {
             Some(_) => Err(RecordError::TooMuch),
             None => Ok(Self {

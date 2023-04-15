@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Formula {
     Top,
@@ -9,6 +11,98 @@ pub enum Formula {
     Implies(Box<Formula>, Box<Formula>),
     RLImplies(Box<Formula>, Box<Formula>),
     Equiv(Box<Formula>, Box<Formula>),
+}
+
+#[derive(Clone, PartialEq)]
+pub enum NormalizedFormula {
+    Bottom,
+    Variable(char),
+    Or(Box<NormalizedFormula>, Box<NormalizedFormula>),
+    And(Box<NormalizedFormula>, Box<NormalizedFormula>),
+    Implies(Box<NormalizedFormula>, Box<NormalizedFormula>),
+}
+
+impl Formula {
+    pub fn equiv(&self, other: &Self) -> bool {
+        match self {
+                Formula::Top => match other {
+                    Formula::Top => true,
+                    Formula::Implies(a, b) | Formula::RLImplies(a, b) => {
+                        matches!((a.as_ref(), b.as_ref()), (Formula::Bottom, Formula::Bottom))
+                    }
+                    _ => false,
+                },
+                Formula::Not(f) => match other {
+                    Formula::Not(g) => f.equiv(g),
+                    Formula::Implies(g, b) | Formula::RLImplies(b, g) => {
+                        matches!(b.as_ref(), Formula::Bottom) && f.equiv(g)
+                    }
+                    _ => false,
+                },
+                Formula::Equiv(a, b) => match other {
+                    Formula::And(l, r) => {
+                        l.equiv(&Formula::Implies(a.to_owned(), b.to_owned()))
+                            && r.equiv(&Formula::Implies(b.to_owned(), a.to_owned()))
+                    }
+                    Formula::Equiv(oa, ob) => a.equiv(oa) && b.equiv(ob),
+                    _ => false,
+                },
+                Formula::Implies(a, b) | Formula::RLImplies(b, a) => match other {
+                    Formula::Implies(oa, ob) | Formula::RLImplies(ob, oa) => {
+                        a.equiv(oa) && b.equiv(ob)
+                    },
+                    Formula::Top => **a == Formula::Bottom && **b == Formula::Bottom,
+                    Formula::Not(f) => a.equiv(f) && **b == Formula::Bottom,
+                    _ => false,
+                },
+                Formula::And(l, r) => match other {
+                    Formula::And(ol, or) => l.equiv(ol) && r.equiv(or),
+                    Formula::Equiv(a, b) => l.equiv(&Formula::Implies(a.to_owned(), b.to_owned()))
+                    && r.equiv(&Formula::Implies(b.to_owned(), a.to_owned())),
+                    _ => false,
+                },
+                Formula::Or(l, r) => match other {
+                    Formula::Or(ol, or) => l.equiv(ol) && r.equiv(or),
+                    _ => false,
+                },
+                Formula::Bottom => *other == Formula::Bottom,
+                Formula::Variable(v) => *other == Formula::Variable(*v),
+            }
+    }
+    pub fn normalize(self) -> NormalizedFormula {
+        match self {
+            Formula::Top => NormalizedFormula::Implies(
+                Box::new(NormalizedFormula::Bottom),
+                Box::new(NormalizedFormula::Bottom),
+            ),
+            Formula::Not(f) => NormalizedFormula::Implies(
+                Box::new(f.normalize()),
+                Box::new(NormalizedFormula::Bottom),
+            ),
+            Formula::Equiv(a, b) => {
+                let a = Box::new(a.normalize());
+                let b = Box::new(b.normalize());
+                NormalizedFormula::And(
+                    Box::new(NormalizedFormula::Implies(a.clone(), b.clone())),
+                    Box::new(NormalizedFormula::Implies(b, a)),
+                )
+            }
+            Formula::RLImplies(a, b) => {
+                NormalizedFormula::Implies(Box::new(b.normalize()), Box::new(a.normalize()))
+            }
+            Formula::And(a, b) => {
+                NormalizedFormula::And(Box::new(a.normalize()), Box::new(b.normalize()))
+            }
+            Formula::Or(a, b) => {
+                NormalizedFormula::Or(Box::new(a.normalize()), Box::new(b.normalize()))
+            }
+            Formula::Implies(a, b) => {
+                NormalizedFormula::Implies(Box::new(a.normalize()), Box::new(b.normalize()))
+            }
+            Formula::Bottom => NormalizedFormula::Bottom,
+            Formula::Variable(v) => NormalizedFormula::Variable(v),
+        }
+    }
 }
 
 enum Lexemes {
@@ -94,18 +188,29 @@ impl Operators {
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Error,Debug, PartialEq)]
 pub enum TokenizationError {
+    #[error("character {0}->'{1}' is invalid.")]
     InvalidCharacter(usize, char),
+    #[error("Closing parenthesis unmatched.")]
     UnmatchedClosingParenthesis,
+    #[error("Opening parenthesis unmatched")]
     UnmatchedOpeningParenthesis,
+    #[error("Input is too long")]
     InputIsTooLong,
+    #[error("A formula is missing")]
     AFormulaIsMissing,
+    #[error("Too many formulas were provided")]
     TooManyFormulas,
+    #[error("Internal error({0}). This shouldn't be happending.")]
     InternalError(usize),
+    #[error("Parenthesis group is empty")]
     EmptyParenthesis,
+    #[error("Subformula is invalid")]
     InvalidSubFormula,
+    #[error("An operator was not provided a right operand.")]
     OperatorWithoutRightHandside,
+    #[error("A binary operator was not provided a right operand.")]
     BinaryOperatorWithoutRightHandside,
 }
 

@@ -29,7 +29,7 @@ impl std::process::Termination for Answer {
                 ExitCode::FAILURE
             },
             Answer::ErrorReadingTheProof(e) => {
-                println!("Error reading the proof:");
+                println!("Error reading the proof: {}", e);
                 ExitCode::FAILURE
             },
             Answer::ErrorsInTheProof { first_error, errors } => {

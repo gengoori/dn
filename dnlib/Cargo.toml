@@ -1,5 +1,5 @@
 [package]
-name = "dn-lib"
+name = "dnlib"
 version = "0.0.0"
 authors = ["tartasprint"]
 edition = "2021"
